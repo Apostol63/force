@@ -2,7 +2,8 @@
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
-use App\Http\Controllers\Api\AuthenticatedSessionController;
+use App\Http\Controllers\Api\LogoutUserController;
+use App\Http\Controllers\Api\LoginUserController;
 use App\Http\Controllers\Api\RegisteredUserController;
 use App\Http\Controllers\Api\TaskController;
 
@@ -15,12 +16,12 @@ Route::prefix('auth')->group(function () {
         ->middleware('guest')
         ->name('register');
 
-    Route::post('/login', [AuthenticatedSessionController::class, 'store'])
+    Route::post('/login', [LoginUserController::class, 'store'])
         ->middleware('guest')
         ->name('login');
 
-    Route::post('/logout', [AuthenticatedSessionController::class, 'destroy'])
-        ->middleware('auth')
+    Route::post('/logout', [LogoutUserController::class, 'destroy'])
+        ->middleware('auth:sanctum')
         ->name('logout');
 });
 

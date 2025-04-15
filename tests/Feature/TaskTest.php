@@ -6,10 +6,11 @@ use Tests\TestCase;
 use App\Models\User;
 use App\Models\Task;
 use App\Enums\TaskStatus;
+use Laravel\Sanctum\Sanctum;
 use Symfony\Component\HttpFoundation\Response;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 
-class TaskTests extends TestCase
+class TaskTest extends TestCase
 {
     use RefreshDatabase;
 
@@ -93,7 +94,7 @@ class TaskTests extends TestCase
         $response->assertStatus(Response::HTTP_FORBIDDEN);
     }
 
-    public function test_update_wrong_task(): void
+    public function test_update_wrong_task()
     {
         $user = User::factory()->create();
 
@@ -115,7 +116,7 @@ class TaskTests extends TestCase
         ]);
     }
 
-    public function test_update_task_wrong_data(): void
+    public function test_update_task_wrong_data()
     {
         $user = User::factory()->create();
 
@@ -134,4 +135,95 @@ class TaskTests extends TestCase
         $response->assertStatus(Response::HTTP_UNPROCESSABLE_ENTITY);
     }
 
+    public function test_delete_task_success()
+    {
+        $user = User::factory()->create();
+        Sanctum::actingAs($user);
+
+        $task = Task::factory()->create([
+            'user_id' => $user->id,
+        ]);
+
+        $response = $this->deleteJson("/api/tasks/{$task->id}");
+
+        $response->assertStatus(Response::HTTP_OK);
+        $response->assertJson([
+            'message' => 'Задача успешно удалена',
+        ]);
+
+        $this->assertDatabaseMissing('tasks', ['id' => $task->id]);
+    }
+
+    public function test_delete_task_other_user()
+    {
+        $user1 = User::factory()->create();
+        $user2 = User::factory()->create();
+
+        Sanctum::actingAs($user1);
+
+        $task = Task::factory()->create([
+            'user_id' => $user2->id,
+        ]);
+
+        $response = $this->deleteJson("/api/tasks/{$task->id}");
+
+        $response->assertStatus(Response::HTTP_FORBIDDEN);
+    }
+
+    public function test_delete_no_exist_task()
+    {
+        $user = User::factory()->create();
+        Sanctum::actingAs($user);
+
+        $nonexistentId = 9999;
+        $response = $this->deleteJson("/api/tasks/{$nonexistentId}");
+
+        $response->assertStatus(Response::HTTP_NOT_FOUND);
+        $response->assertJson([
+            'message' => 'Такой задачи не существует',
+        ]);
+    }
+
+    public function test_user_get_all_tasks()
+    {
+        $user1 = User::factory()->create();
+        $user2 = User::factory()->create();
+        Sanctum::actingAs($user1);
+
+        Task::factory()->count(3)->create(['user_id' => $user1->id]);
+        Task::factory()->count(2)->create(['user_id' => $user2->id]);
+
+        $response = $this->getJson('/api/tasks');
+
+        $response->assertStatus(Response::HTTP_OK);
+        $response->assertJsonCount(3, 'data');
+    }
+
+    public function test_user_get_tasks_filtered_status()
+    {
+        $user = User::factory()->create();
+        Sanctum::actingAs($user);
+
+        Task::factory()->create([
+            'user_id' => $user->id,
+            'status' => TaskStatus::COMPLETED->value,
+        ]);
+
+        Task::factory()->create([
+            'user_id' => $user->id,
+            'status' => TaskStatus::IN_PROGRESS->value,
+        ]);
+
+        $response = $this->getJson('/api/tasks?status=' . TaskStatus::COMPLETED->value);
+
+        $response->assertStatus(Response::HTTP_OK);
+        $response->assertJsonCount(1, 'data');
+    }
+
+    public function test_unauthorized_user_get_tasks()
+    {
+        $response = $this->getJson('/api/tasks');
+
+        $response->assertStatus(Response::HTTP_UNAUTHORIZED);
+    }
 }
